@@ -145,7 +145,7 @@ for index, idir in enumerate(subject_dirs):
 	html_out=output_html(background_fname,foreground_nii,plot_title)
 	html_list.append(html_out)
 
-html_string = "".join(html_list)
+html_string = "".join(sum(html_list,[]))
 message = f"""<html>
 		<head></head>
 		<body>{html_string}</body>
