@@ -192,35 +192,35 @@ def output_html(background_nii, foreground_nii, fig_title):
 		display_z.close()
 	
 		#displaying 6 columns of gad images for coronal, sagittal and frontal view
-		display_x = plotting.plot_anat(
+		display_gad_x = plotting.plot_anat(
 			gad_img, #gad image
 			display_mode="x",# displaying 6 cuts in each axis 
 			draw_cross=False,
 			cut_coords=(-60,-40,0,20,40,60),
 			**plot_args_ref,
 		)
-		bg_x_svgs = [fromstring(extract_svg(display_x, 300))]#rescaling for gad (background)
-		display_x.close()
+		bg_x_svgs = [fromstring(extract_svg(display_gad_x, 300))]#rescaling for gad (background)
+		display_gad_x.close()
 	
-		display_y = plotting.plot_anat(
+		display_gad_y = plotting.plot_anat(
 			gad_img, #gad image
 			display_mode="y",# displaying 6 cuts in each axis 
 			draw_cross=False,
 			cut_coords=(-40,-20,0,20,40,60),
 			**plot_args_ref,
 		)
-		bg_y_svgs = [fromstring(extract_svg(display_y, 300))]#rescaling for gad (background)
-		display_y.close()
+		bg_y_svgs = [fromstring(extract_svg(display_gad_y, 300))]#rescaling for gad (background)
+		display_gad_y.close()
 	
-		display_z = plotting.plot_anat(
+		display_gad_z = plotting.plot_anat(
 			gad_img, #gad image
 			display_mode="z",# displaying 6 cuts in each axis 
 			draw_cross=False,
 			cut_coords=(-40,-20,0,20,40,60),
 			**plot_args_ref,
 		)
-		bg_z_svgs = [fromstring(extract_svg(display_z, 300))]#rescaling for gad (background)
-		display_z.close()
+		bg_z_svgs = [fromstring(extract_svg(display_gad_z, 300))]#rescaling for gad (background)
+		display_gad_z.close()
 		
 		final_svg_rigid_x= "\n".join(clean_svg(fg_x_svgs, bg_x_svgs))#plotting them overtop of each other, and brings them in and out
 		final_svg_rigid_y= "\n".join(clean_svg(fg_y_svgs, bg_y_svgs))#plotting them overtop of each other, and brings them in and out
