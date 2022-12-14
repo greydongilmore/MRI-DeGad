@@ -1,24 +1,40 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import base64
 import os
 import re
-from glob import glob
-from io import BytesIO, StringIO
+from io import StringIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from uuid import uuid4
 import matplotlib
-import matplotlib.pyplot as plt
 import nibabel as nib
 import numpy as np
 from nilearn import plotting
-from nilearn.datasets import load_mni152_template
 from svgutils.compose import Unit
 from svgutils.transform import GroupElement, SVGFigure, fromstring
+import subprocess
 
 matplotlib.use('Agg')
+
+def run_command(cmdLineArguments):
+	subprocess.run(cmdLineArguments, stdout=subprocess.PIPE,stderr=subprocess.STDOUT, shell=True)
+
+def xfm_txt_to_tfm(xfm_fname):
+	transformMatrix = np.loadtxt(xfm_fname)
+	lps2ras=np.diag([-1, -1, 1, 1])
+	ras2lps=np.diag([-1, -1, 1, 1])
+	transform_lps=np.dot(ras2lps, np.dot(transformMatrix,lps2ras))
+	
+	Parameters = " ".join([str(x) for x in np.concatenate((transform_lps[0:3,0:3].reshape(9), transform_lps[0:3,3]))])
+	
+	tfm_fname=os.path.splitext(xfm_fname)[0] + '.tfm'
+	with open(tfm_fname, 'w') as fid:
+		fid.write("#Insight Transform File V1.0\n")
+		fid.write("#Transform 0\n")
+		fid.write("Transform: AffineTransform_double_3_3\n")
+		fid.write("Parameters: " + Parameters + "\n")
+		fid.write("FixedParameters: 0 0 0\n")
 
 def svg2str(display_object, dpi):
 	"""Serialize a nilearn display object to string."""
@@ -112,11 +128,11 @@ def clean_svg(fg_svgs, bg_svgs, ref=0):
 		svg.insert(
 			2,
 			"""\
-
+<style type="text/css">
 @keyframes flickerAnimation%s { 0%% {opacity: 1;} 100%% { opacity:0; }}
 .foreground-svg { animation: 1s ease-in-out 0s alternate none infinite running flickerAnimation%s;}
 .foreground-svg:hover { animation-play-state: running;}
-"""
+</style>"""
 			% tuple([uuid4()] * 2),
 		)
 
@@ -142,16 +158,15 @@ def output_html(background_nii, foreground_nii, fig_title):
 	
 	html_list=[]
 	
+	#displaying gad image as background 
+	gad_img = nib.load(background_nii)
+	gad_img= nib.Nifti1Image(
+		gad_img.get_fdata().astype(np.float32),
+		header=gad_img.header,
+		affine=gad_img.affine,
+	)
+	
 	for icnt,ifore in enumerate(foreground_nii):
-		#displaying gad image as background 
-		gad_img = nib.load(background_nii)
-		gad_img= nib.Nifti1Image(
-			gad_img.get_fdata().astype(np.float32),
-			header=gad_img.header,
-			affine=gad_img.affine,
-		)
-		
-		##################################displaying image as foreground #######################
 		nongad_rigid = nib.load(ifore)
 		nongad_rigid = nib.Nifti1Image(
 			nongad_rigid.get_fdata().astype(np.float32),
@@ -159,85 +174,48 @@ def output_html(background_nii, foreground_nii, fig_title):
 			affine=nongad_rigid.affine,
 		)
 		
-		plot_args_ref = {"dim": -0.5} #dim adjustss the brifhtness, with -2 being max brightness and 2 being max dimness
-	
-		display_x = plotting.plot_anat( #class that can extract vector graphics from image: plotting gad image
-			nongad_rigid, #nongad rigid image 
-			display_mode="x",
-			draw_cross=False,
-			cut_coords=(-60,-40,0,20,40,60), #taking slice close to centre, coronal, sagittal and frontal
-			**plot_args_ref, # ** upacks the dict
-		)
-		fg_x_svgs = [fromstring(extract_svg(display_x, 300))] #rescaling for nongad rigid 
-		display_x.close()
-	
-		display_y = plotting.plot_anat( #class that can extract vector graphics from image: plotting gad image
-			nongad_rigid, #nongad rigid image 
-			display_mode="y",
-			draw_cross=False,
-			cut_coords=(-40,-20,0,20,40,60), #taking slice close to centre, coronal, sagittal and frontal
-			**plot_args_ref, # ** upacks the dict
-		)
-		fg_y_svgs = [fromstring(extract_svg(display_y, 300))] #rescaling for nongad rigid 
-		display_y.close()
-	
-		display_z = plotting.plot_anat( #class that can extract vector graphics from image: plotting gad image
-			nongad_rigid, #nongad rigid image 
-			display_mode="z",
-			draw_cross=False,
-			cut_coords=(-40,-20,0,20,40,60), #taking slice close to centre, coronal, sagittal and frontal
-			**plot_args_ref, # ** upacks the dict
-		)
-		fg_z_svgs = [fromstring(extract_svg(display_z, 300))] #rescaling for nongad rigid 
-		display_z.close()
-	
-		#displaying 6 columns of gad images for coronal, sagittal and frontal view
-		display_gad_x = plotting.plot_anat(
-			gad_img, #gad image
-			display_mode="x",# displaying 6 cuts in each axis 
-			draw_cross=False,
-			cut_coords=(-60,-40,0,20,40,60),
-			**plot_args_ref,
-		)
-		bg_x_svgs = [fromstring(extract_svg(display_gad_x, 300))]#rescaling for gad (background)
-		display_gad_x.close()
-	
-		display_gad_y = plotting.plot_anat(
-			gad_img, #gad image
-			display_mode="y",# displaying 6 cuts in each axis 
-			draw_cross=False,
-			cut_coords=(-40,-20,0,20,40,60),
-			**plot_args_ref,
-		)
-		bg_y_svgs = [fromstring(extract_svg(display_gad_y, 300))]#rescaling for gad (background)
-		display_gad_y.close()
-	
-		display_gad_z = plotting.plot_anat(
-			gad_img, #gad image
-			display_mode="z",# displaying 6 cuts in each axis 
-			draw_cross=False,
-			cut_coords=(-40,-20,0,20,40,60),
-			**plot_args_ref,
-		)
-		bg_z_svgs = [fromstring(extract_svg(display_gad_z, 300))]#rescaling for gad (background)
-		display_gad_z.close()
+		plot_args_ref = {"dim": -0.5}
 		
-		final_svg_rigid_x= "\n".join(clean_svg(fg_x_svgs, bg_x_svgs))#plotting them overtop of each other, and brings them in and out
-		final_svg_rigid_y= "\n".join(clean_svg(fg_y_svgs, bg_y_svgs))#plotting them overtop of each other, and brings them in and out
-		final_svg_rigid_z= "\n".join(clean_svg(fg_z_svgs, bg_z_svgs))#plotting them overtop of each other, and brings them in and out
+		html_list.append([f"""<center>
+<h3 style="font-size:42px">{fig_title[icnt]}</h3>
+</center>"""])
 		
-		html_list.append([f"""
-			<center>
-				<h1 style="font-size:42px">{isub}</h1>
-				<p>{final_svg_rigid_x}</p>
-				<p>{final_svg_rigid_y}</p>
-				<p>{final_svg_rigid_z}</p>
-			</center>"""])
+		for icut in ('x','y','z'):
+			display = plotting.plot_anat( #class that can extract vector graphics from image: plotting gad image
+				nongad_rigid, #nongad rigid image 
+				display_mode=icut,
+				draw_cross=False,
+				annotate=False,
+				cut_coords=(-60,-40,0,20,40,60), #taking slice close to centre, coronal, sagittal and frontal
+				**plot_args_ref, # ** upacks the dict
+			)
+			fg_svgs = [fromstring(extract_svg(display, 300))] #rescaling for nongad rigid 
+			display.close()
+			
+			display = plotting.plot_anat( #class that can extract vector graphics from image: plotting gad image
+				gad_img, #nongad rigid image 
+				display_mode=icut,
+				draw_cross=False,
+				annotate=False,
+				cut_coords=(-60,-40,0,20,40,60), #taking slice close to centre, coronal, sagittal and frontal
+				**plot_args_ref, # ** upacks the dict
+			)
+			bg_svgs = [fromstring(extract_svg(display, 300))] #rescaling for nongad rigid 
+			display.close()
+			
+			final_svg= "\n".join(clean_svg(fg_svgs, bg_svgs))
+			html_list.append([f"""<center>
+<p style="margin : 0; padding-top:0;">{final_svg}</p>
+</center>"""])
 		
-	html_list.append(["""
-				<hr style="height:4px;border-width:0;color:black;background-color:black;margin:30px;">"""
-	])
+		if icnt != len(foreground_nii)-1:
+			html_list.append(["""<center>
+<hr style="height:3px;border-width:0;color:black;background-color:black;margin:15px;">
+</center>"""])
 	
-	print(f"Done {isub}")
-
-	return sum(html_list, [])
+	html_list.append(["""<center>
+<hr style="height:6px;border-width:0;color:black;background-color:black;margin:30px;">
+<hr style="height:6px;border-width:0;color:black;background-color:black;margin:30px;">
+</center>"""])
+	
+	return sum(html_list,[])
